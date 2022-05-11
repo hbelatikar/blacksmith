@@ -47,8 +47,8 @@ uint64_t static inline GB(uint64_t value) {
 #define HAMMER_ROUNDS 1000000
 
 // threshold to distinguish between row buffer miss (t > THRESH) and row buffer hit (t < THRESH)
-#define THRESH 495  // worked best on DIMM 6
-//#define THRESH 430  // worked best on DIMM 18
+// #define THRESH 310  // worked best on DIMM 6
+#define THRESH 430  // worked best on DIMM 18
 
 // number of conflicting addresses to be determined for each bank
 #define NUM_TARGETS 10

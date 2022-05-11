@@ -1,12 +1,16 @@
 #include "Memory/DramAnalyzer.hpp"
 
 #include <cassert>
+#include <iostream>
 #include <unordered_set>
 
 void DramAnalyzer::find_bank_conflicts() {
   size_t nr_banks_cur = 0;
   int remaining_tries = NUM_BANKS*256;  // experimentally determined, may be unprecise
   while (nr_banks_cur < NUM_BANKS && remaining_tries > 0) {
+    
+    if (!(remaining_tries % 20)) std::cout << "Remaining Tries : "<< remaining_tries << "\n";
+    
     reset:
     remaining_tries--;
     auto a1 = start_address + (dist(gen)%(MEM_SIZE/64))*64;
@@ -23,18 +27,23 @@ void DramAnalyzer::find_bank_conflicts() {
           auto bank = banks.at(i);
           ret1 = measure_time(a1, bank[0]);
           ret2 = measure_time(a2, bank[0]);
-          if ((ret1 > THRESH) || (ret2 > THRESH)) {
+          if (((ret1 > THRESH) || /*^*/ (ret2 > THRESH))) { // && remaining_tries >= 0
             // possibly noise if only exactly one is true,
             // i.e., (ret1 > THRESH) or (ret2 > THRESH)
+            std::cout << "Noisy: ret1 - "<< ret1 << "\t ret2 - "<< ret2<< "\n";
             goto reset;
           }
         }
       }
 
       // stop if we already determined addresses for each bank
-      if (all_banks_set) return;
+      if (all_banks_set) {
+        std::cout << "All banks set \n";  
+        return;
+      }
 
       // store addresses found for each bank
+      // std::cout << "Storing addresses found for each bank \n";  
       assert(banks.at(nr_banks_cur).empty() && "Bank not empty");
       banks.at(nr_banks_cur).push_back(a1);
       banks.at(nr_banks_cur).push_back(a2);
@@ -94,9 +103,9 @@ void DramAnalyzer::load_known_functions(int num_ranks) {
   if (num_ranks==1) {
     bank_rank_functions = std::vector<uint64_t>({0x2040, 0x24000, 0x48000, 0x90000});
     row_function = 0x3ffe0000;
-  } else if (num_ranks==2) {
-    bank_rank_functions = std::vector<uint64_t>({0x2040, 0x44000, 0x88000, 0x110000, 0x220000});
-    row_function = 0x3ffc0000;
+  // } else if (num_ranks==2) {
+  //   bank_rank_functions = std::vector<uint64_t>({0x2040, 0x44000, 0x88000, 0x110000, 0x220000});
+  //   row_function = 0x3ffc0000;
   } else {
     Logger::log_error("Cannot load bank/rank and row function if num_ranks is not 1 or 2.");
     exit(1);
@@ -156,17 +165,22 @@ size_t DramAnalyzer::count_acts_per_ref() {
 
     // get end timestamp
     after = rdtscp();
-
+    
     activation_count += 2;
-
     if ((after - before) > 1000) {
       if (i > skip_first_N && activation_count_old!=0) {
         uint64_t value = (activation_count - activation_count_old)*2;
         acts.push_back(value);
         running_sum += value;
+        
         // check after each 200 data points if our standard deviation reached 1 -> then stop collecting measurements
-        if ((acts.size()%200)==0 && compute_std(acts, running_sum, acts.size())<3.0)
-          break;
+        if ((acts.size()%200)==0){
+          if ((acts.size()%20000)==0) std::cout << "SD :" << compute_std(acts, running_sum, acts.size()) << std::endl;
+          if (compute_std(acts, running_sum, acts.size())<26.0) {
+            std::cout << "We broke \n";
+            break;
+          }
+        }
       }
       activation_count_old = activation_count;
     }
@@ -178,3 +192,5 @@ size_t DramAnalyzer::count_acts_per_ref() {
 
   return activations;
 }
+
+

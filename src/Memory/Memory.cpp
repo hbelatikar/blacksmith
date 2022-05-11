@@ -10,6 +10,7 @@ void Memory::allocate_memory(size_t mem_size) {
 
   if (superpage) {
     // allocate memory using super pages
+    std::cout << "Allocating memory using super pages\n";
     fp = fopen(hugetlbfs_mountpoint.c_str(), "w+");
     if (fp==nullptr) {
       Logger::log_info(format_string("Could not mount superpage from %s. Error:", hugetlbfs_mountpoint.c_str()));
@@ -24,12 +25,16 @@ void Memory::allocate_memory(size_t mem_size) {
     }
     target = (volatile char*) mapped_target;
   } else {
+    std::cout << "Allocating memory using huge pages\n";
+
     // allocate memory using huge pages
     assert(posix_memalign((void **) &target, MEM_SIZE, MEM_SIZE)==0);
     assert(madvise((void *) target, MEM_SIZE, MADV_HUGEPAGE)==0);
     memset((char *) target, 'A', MEM_SIZE);
     // for khugepaged
     Logger::log_info("Waiting for khugepaged.");
+    std::cout << "Sleeping for 10 secs\n";
+
     sleep(10);
   }
 
@@ -37,10 +42,13 @@ void Memory::allocate_memory(size_t mem_size) {
     Logger::log_error(format_string("Could not create mmap area at address %p, instead using %p.",
         start_address, target));
     start_address = target;
+    std::cout << "Start address is "<< start_address << "\n";
+
   }
 
   // initialize memory with random but reproducible sequence of numbers
   initialize(DATA_PATTERN::RANDOM);
+  std::cout << "Memory initialized with random reproducable patterns\n";
 }
 
 void Memory::initialize(DATA_PATTERN data_pattern) {

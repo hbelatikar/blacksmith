@@ -31,6 +31,7 @@ int check_cpu() {
   Logger::log_data(format_string("%s", cpu_model.c_str()));
 
   std::vector<std::string> supported_cpus = {
+      "i5-7500T",
       // Coffee Lake
       "i5-8400",
       "i5-8500",
@@ -59,27 +60,43 @@ int check_cpu() {
 
 int main(int argc, char **argv) {
   Logger::initialize();
-
+  Logger::log_info("Logger Initialized");
+  std::cout << "Logger Initialized" << std::endl;
+  
   // check if the system's CPU is supported by our hard-coded DRAM address matrices
   check_cpu();
+  Logger::log_info("Performed CPU Check");
+  std::cout << "Performed CPU Check" << std::endl;
 
   handle_args(argc, argv);
-
+  Logger::log_info("Args handled");
+  std::cout << "Args handled" << std::endl;
+  
   // prints the current git commit and some program metadata
   Logger::log_metadata(GIT_COMMIT_HASH, program_args.runtime_limit);
 
   // give this process the highest CPU priority so it can hammer with less interruptions
   int ret = setpriority(PRIO_PROCESS, 0, -20);
   if (ret!=0) Logger::log_error("Instruction setpriority failed.");
-
+  Logger::log_info("Process given highest priority");
+  std::cout << "Process given highest priority " << std::endl;
+  
   // allocate a large bulk of contiguous memory
   Memory memory(true);
   memory.allocate_memory(MEM_SIZE);
+  Logger::log_info("Memory Allocated");
+  std::cout << "Memory Allocated" << std::endl;
 
   // find address sets that create bank conflicts
   DramAnalyzer dram_analyzer(memory.get_starting_address());
+  Logger::log_info(format_string("Starting address set as %x",memory.get_starting_address()));
+  std::cout << "Starting address set as "<< memory.get_starting_address() << "" << std::endl;
+
   dram_analyzer.find_bank_conflicts();
+  std::cout << "Bank conflicts found " << std::endl;
+
   if (program_args.num_ranks != 0) {
+    std::cout << "Loading known functions " << std::endl;
     dram_analyzer.load_known_functions(program_args.num_ranks);
   } else {
     Logger::log_error("Program argument '--ranks <integer>' was probably not passed. Cannot continue.");
@@ -87,25 +104,36 @@ int main(int argc, char **argv) {
   }
   // initialize the DRAMAddr class to load the proper memory configuration
   DRAMAddr::initialize(dram_analyzer.get_bank_rank_functions().size(), memory.get_starting_address());
-
+  std::cout << "DRAM addr class initialized " << std::endl;
+  
   // count the number of possible activations per refresh interval, if not given as program argument
-  if (program_args.acts_per_ref==0)
+  if (program_args.acts_per_ref==0) {
+    std::cout << "Activations per refresh not provided, starting the count." << std::endl;
     program_args.acts_per_ref = dram_analyzer.count_acts_per_ref()*2;
+  }
+
+  std::cout << "Refresh intervals set as " << program_args.acts_per_ref << "" << std::endl;
 
   if (!program_args.load_json_filename.empty()) {
+    std::cout << "JSON File Provided!" << std::endl;
     ReplayingHammerer replayer(memory);
+    std::cout << "Hammering was replayed, now checking sweeping options. " << std::endl;
     if (program_args.sweeping) {
+      std::cout << "Asked to perform sweeping " << std::endl;
       replayer.replay_patterns_brief(program_args.load_json_filename, program_args.pattern_ids,
           MB(256), false);
     } else {
+      std::cout << "Sweeping not needed " << std::endl;
       replayer.replay_patterns(program_args.load_json_filename, program_args.pattern_ids);
     }
   } else if (program_args.do_fuzzing && program_args.use_synchronization) {
+    std::cout << "JSON file note provided and we needed to do fuzzing using synchronization." << std::endl;
     FuzzyHammerer::n_sided_frequency_based_hammering(dram_analyzer, memory, static_cast<int>(program_args.acts_per_ref), program_args.runtime_limit,
         program_args.num_address_mappings_per_pattern, program_args.sweeping);
   } else if (!program_args.do_fuzzing) {
 //    TraditionalHammerer::n_sided_hammer(memory, program_args.acts_per_ref, program_args.runtime_limit);
 //    TraditionalHammerer::n_sided_hammer_experiment(memory, program_args.acts_per_ref);
+    std::cout << "Don't do fuzzing, just plain old rowhammering. " << std::endl;
     TraditionalHammerer::n_sided_hammer_experiment_frequencies(memory);
   } else {
     Logger::log_error("Invalid combination of program control-flow arguments given. "

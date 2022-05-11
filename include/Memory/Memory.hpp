@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <string>
+#include <iostream>
 
 #include "Memory/DramAnalyzer.hpp"
 #include "Fuzzer/PatternAddressMapper.hpp"
