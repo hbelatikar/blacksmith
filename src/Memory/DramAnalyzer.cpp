@@ -9,15 +9,19 @@ void DramAnalyzer::find_bank_conflicts() {
   int remaining_tries = NUM_BANKS*256;  // experimentally determined, may be unprecise
   while (nr_banks_cur < NUM_BANKS && remaining_tries > 0) {
     
-    if (!(remaining_tries % 20)) std::cout << "Remaining Tries : "<< remaining_tries << "\n";
+    // hsb: Prints out the number of tries left for debugging. 
+    if (!(remaining_tries % 20)) std::cout << "Remaining Tries : "<< remaining_tries << std::endl;
     
     reset:
     remaining_tries--;
     auto a1 = start_address + (dist(gen)%(MEM_SIZE/64))*64;
     auto a2 = start_address + (dist(gen)%(MEM_SIZE/64))*64;
+
+    // hsb : Measure time to access two addresses to make sure they are similar
     auto ret1 = measure_time(a1, a2);
     auto ret2 = measure_time(a1, a2);
 
+    // hsb : Both the accesses are greater than threshold -> Banks are same
     if ((ret1 > THRESH) && (ret2 > THRESH)) {
       bool all_banks_set = true;
       for (size_t i = 0; i < NUM_BANKS; i++) {
@@ -25,12 +29,16 @@ void DramAnalyzer::find_bank_conflicts() {
           all_banks_set = false;
         } else {
           auto bank = banks.at(i);
-          ret1 = measure_time(a1, bank[0]);
+          
+          //Measure the access time for addrss with respect to bank[0]
+          ret1 = measure_time(a1, bank[0]); 
           ret2 = measure_time(a2, bank[0]);
-          if (((ret1 > THRESH) || /*^*/ (ret2 > THRESH))) { // && remaining_tries >= 0
+          
+          //If both of the return values are still greater than threshold, we may have obsereved noise
+          if (((ret1 > THRESH) || (ret2 > THRESH))) { 
             // possibly noise if only exactly one is true,
             // i.e., (ret1 > THRESH) or (ret2 > THRESH)
-            std::cout << "Noisy: ret1 - "<< ret1 << "\t ret2 - "<< ret2<< "\n";
+            std::cout << "Noisy: ret1 - "<< ret1 << "\t ret2 - "<< ret2 << std::endl;
             goto reset;
           }
         }
@@ -149,6 +157,7 @@ size_t DramAnalyzer::count_acts_per_ref() {
     return val;
   };
 
+  // hsb : Measurement of activations per refresh starts here
   for (size_t i = 0;; i++) {
     // flush a and b from caches
     clflushopt(a);
@@ -167,7 +176,12 @@ size_t DramAnalyzer::count_acts_per_ref() {
     after = rdtscp();
     
     activation_count += 2;
+
+    // hsb : If the after-before is large, we may have encountered a refresh cycle between these accesses
     if ((after - before) > 1000) {
+      // hsb : To confirm if this is the best possible activations value, perform it for 200 times 
+      //       and calculate the standard deviation
+
       if (i > skip_first_N && activation_count_old!=0) {
         uint64_t value = (activation_count - activation_count_old)*2;
         acts.push_back(value);
@@ -175,8 +189,13 @@ size_t DramAnalyzer::count_acts_per_ref() {
         
         // check after each 200 data points if our standard deviation reached 1 -> then stop collecting measurements
         if ((acts.size()%200)==0){
+          // hsb : Prind out the SD just for debbuging purposes
           if ((acts.size()%20000)==0) std::cout << "SD :" << compute_std(acts, running_sum, acts.size()) << std::endl;
-          if (compute_std(acts, running_sum, acts.size())<26.0) {
+          
+          // hsb : We found the best value for SD and it was also consistent over 200 iterations
+          if (compute_std(acts, running_sum, acts.size())<3.0) {
+            // hsb : Stop the iterations, since we have the best value 
+            // hsb : Debug statement to indicate the loop is over.
             std::cout << "We broke \n";
             break;
           }

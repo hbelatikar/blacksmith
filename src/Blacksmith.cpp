@@ -30,6 +30,7 @@ int check_cpu() {
   Logger::log_info("Detecting CPU model:");
   Logger::log_data(format_string("%s", cpu_model.c_str()));
 
+  // hsb : Add your specific CPU to this vector list
   std::vector<std::string> supported_cpus = {
       "i5-7500T",
       // Coffee Lake
@@ -59,15 +60,19 @@ int check_cpu() {
 }
 
 int main(int argc, char **argv) {
+  
+  //hsb : Initializes blacksmith logger, logs are stored in the specific log file with the user defined file descriptor option (--dimm-id)
   Logger::initialize();
   Logger::log_info("Logger Initialized");
   std::cout << "Logger Initialized" << std::endl;
   
   // check if the system's CPU is supported by our hard-coded DRAM address matrices
+  //hsb : CPU model is checked here, make sure you have added your cpu to the vector list
   check_cpu();
   Logger::log_info("Performed CPU Check");
   std::cout << "Performed CPU Check" << std::endl;
 
+  // hsb : User defined arguments are handled
   handle_args(argc, argv);
   Logger::log_info("Args handled");
   std::cout << "Args handled" << std::endl;
@@ -82,6 +87,7 @@ int main(int argc, char **argv) {
   std::cout << "Process given highest priority " << std::endl;
   
   // allocate a large bulk of contiguous memory
+  // hsb: Allocates the memory to 1G huge pages
   Memory memory(true);
   memory.allocate_memory(MEM_SIZE);
   Logger::log_info("Memory Allocated");
@@ -92,10 +98,13 @@ int main(int argc, char **argv) {
   Logger::log_info(format_string("Starting address set as %x",memory.get_starting_address()));
   std::cout << "Starting address set as "<< memory.get_starting_address() << "" << std::endl;
 
+  // hsb : Bank conflicts are generated, Blacksmith's version of DRAMA. (Proper mappings are required)
+  // hsb : See function for more details
   dram_analyzer.find_bank_conflicts();
   std::cout << "Bank conflicts found " << std::endl;
 
   if (program_args.num_ranks != 0) {
+    // hsb : sets the bank and row functions as per the mappings found through DRAMA.
     std::cout << "Loading known functions " << std::endl;
     dram_analyzer.load_known_functions(program_args.num_ranks);
   } else {
@@ -108,6 +117,7 @@ int main(int argc, char **argv) {
   
   // count the number of possible activations per refresh interval, if not given as program argument
   if (program_args.acts_per_ref==0) {
+    // hsb: Finds the number of activations per refresh cycle. See function for more details
     std::cout << "Activations per refresh not provided, starting the count." << std::endl;
     program_args.acts_per_ref = dram_analyzer.count_acts_per_ref()*2;
   }
@@ -127,7 +137,7 @@ int main(int argc, char **argv) {
       replayer.replay_patterns(program_args.load_json_filename, program_args.pattern_ids);
     }
   } else if (program_args.do_fuzzing && program_args.use_synchronization) {
-    std::cout << "JSON file note provided and we needed to do fuzzing using synchronization." << std::endl;
+    std::cout << "JSON file not provided and we needed to do fuzzing using synchronization." << std::endl;
     FuzzyHammerer::n_sided_frequency_based_hammering(dram_analyzer, memory, static_cast<int>(program_args.acts_per_ref), program_args.runtime_limit,
         program_args.num_address_mappings_per_pattern, program_args.sweeping);
   } else if (!program_args.do_fuzzing) {
